@@ -14,7 +14,7 @@ const bcrypt = require('bcrypt');
 // Configuración de variables de entorno
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
-const API_PASSWORD = process.env.API_PASSWORD || 'cambiar_esta_contraseña_123';
+const API_PASSWORD = process.env.API_PASSWORD || 'Learsi20';
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? 
   process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'];
 const MAX_FILE_SIZE = process.env.MAX_FILE_SIZE || 10; // MB
