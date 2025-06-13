@@ -23,6 +23,7 @@ const RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX || 100; // requests por ventan
 
 // Inicializar Express
 const app = express();
+let servidor;
 
 // Configuración de seguridad avanzada con Helmet
 app.use(helmet({
@@ -833,9 +834,9 @@ console.log('🚀 Iniciando cliente WhatsApp...');
 cliente.initialize();
 
 // Iniciar el servidor
-const servidor = aplicacion.listen(PUERTO, () => {
-  console.log(`🌐 Servidor API ejecutándose en puerto ${PUERTO}`);
-  console.log(`📱 Dashboard disponible en: http://localhost:${PUERTO}`);
+servidor = app.listen(PORT, () => { 
+  console.log(`🌐 Servidor API ejecutándose en puerto ${PORT}`);
+  console.log(`📱 Dashboard disponible en: http://localhost:${PORT}`);
   console.log(`🔐 Contraseña API actual: ${API_PASSWORD}`);
   console.log('⚠️  IMPORTANTE: Cambia la contraseña en producción usando la variable API_PASSWORD');
   console.log('\n📋 Variables de entorno disponibles:');
@@ -847,14 +848,14 @@ const servidor = aplicacion.listen(PUERTO, () => {
   console.log('   - RATE_LIMIT_WINDOW: Ventana de límite de tasa en minutos');
   console.log('   - RATE_LIMIT_MAX: Máximo de requests por ventana');
   console.log('\n🔗 Endpoints principales:');
-  console.log(`   - GET  http://localhost:${PUERTO}/ (Dashboard)`);
-  console.log(`   - POST http://localhost:${PUERTO}/api/auth (Autenticación)`);
-  console.log(`   - GET  http://localhost:${PUERTO}/api/estado (Estado público)`);
-  console.log(`   - POST http://localhost:${PUERTO}/api/enviar-mensaje (Enviar mensaje)`);
-  console.log(`   - GET  http://localhost:${PUERTO}/api/mensajes-recibidos (Mensajes recibidos)`);
-  console.log(`   - GET  http://localhost:${PUERTO}/api/contactos (Lista de contactos)`);
-  console.log(`   - GET  http://localhost:${PUERTO}/api/grupos (Lista de grupos)`);
-  console.log(`   - GET  http://localhost:${PUERTO}/api/verificar-numero/:numero (Verificar número)`);
+  console.log(`   - GET  http://localhost:${PORT}/ (Dashboard)`);
+  console.log(`   - POST http://localhost:${PORT}/api/auth (Autenticación)`);
+  console.log(`   - GET  http://localhost:${PORT}/api/estado (Estado público)`);
+  console.log(`   - POST http://localhost:${PORT}/api/enviar-mensaje (Enviar mensaje)`);
+  console.log(`   - GET  http://localhost:${PORT}/api/mensajes-recibidos (Mensajes recibidos)`);
+  console.log(`   - GET  http://localhost:${PORT}/api/contactos (Lista de contactos)`);
+  console.log(`   - GET  http://localhost:${PORT}/api/grupos (Lista de grupos)`);
+  console.log(`   - GET  http://localhost:${PORT}/api/verificar-numero/:numero (Verificar número)`);
 });
 
 // Configurar timeout del servidor
@@ -862,7 +863,7 @@ servidor.timeout = 30000; // 30 segundos
 
 // Exportar para pruebas
 module.exports = {
-  aplicacion,
+  app,
   cliente,
   cerrarAplicacion
 };
