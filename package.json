@@ -2,9 +2,9 @@
   "name": "whatsapp-api",
   "version": "1.0.0",
   "description": "API segura de WhatsApp con autenticación y envío de mensajes",
-  "main": "index.js",
+  "main": "WhatsApp.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node WhatsApp.js"
   },
   "engines": {
     "node": ">=18.0.0"
