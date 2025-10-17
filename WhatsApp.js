@@ -560,6 +560,8 @@ app.get('/', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>WhatsApp API - Estado</title>
+      <!-- Incluir librería QRCode.js desde CDN -->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
       <style>
         body { 
           font-family: 'Segoe UI', Arial, sans-serif; 
@@ -596,6 +598,18 @@ app.get('/', (req, res) => {
           border-radius: 8px;
           border: 2px dashed #94a3b8;
         }
+        
+        /* Estilo específico para el contenedor del QR visual */
+        #qr-visual {
+          display: inline-block;
+          margin: 20px 0;
+          padding: 20px;
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* Ocultar el código QR de texto cuando se muestre el visual */
         .qr-datos {
           font-family: 'Courier New', monospace;
           font-size: 8px;
@@ -605,7 +619,9 @@ app.get('/', (req, res) => {
           border-radius: 8px;
           overflow: auto;
           line-height: 1;
+          display: none; /* Oculto por defecto, se mostrará solo si falla el QR visual */
         }
+        
         .instrucciones {
           background: #f1f5f9;
           padding: 20px;
@@ -644,6 +660,8 @@ app.get('/', (req, res) => {
         }
       </style>
       <script>
+        let qrCodeInstance = null; // Variable para almacenar la instancia del QR
+        
         function obtenerClaseEstado(estado) {
           if (estado === 'conectado') return 'conectado';
           if (estado.includes('cargando') || estado === 'autenticado' || estado === 'inicializando') return 'cargando';
@@ -668,6 +686,36 @@ app.get('/', (req, res) => {
           }
         }
 
+        function generarQRVisual(textoQR) {
+          const contenedorQR = document.getElementById('qr-visual');
+          
+          // Limpiar QR anterior si existe
+          if (qrCodeInstance) {
+            contenedorQR.innerHTML = '';
+          }
+          
+          try {
+            // Crear nuevo código QR visual
+            qrCodeInstance = new QRCode(contenedorQR, {
+              text: textoQR,
+              width: 256,
+              height: 256,
+              colorDark: "#000000",
+              colorLight: "#ffffff",
+              correctLevel: QRCode.CorrectLevel.M
+            });
+            
+            // Ocultar el texto del QR
+            document.getElementById('qr-datos').style.display = 'none';
+            
+          } catch (error) {
+            console.error('Error generando QR visual:', error);
+            // Si falla, mostrar el código de texto como respaldo
+            document.getElementById('qr-datos').style.display = 'block';
+            document.getElementById('qr-datos').textContent = textoQR;
+          }
+        }
+
         function verificarEstado() {
           fetch('/api/estado')
           .then(response => response.json())
@@ -682,9 +730,18 @@ app.get('/', (req, res) => {
             const contenedorQr = document.getElementById('qr-contenedor');
             if (datos.codigoQR && datos.estado === 'esperando_qr') {
               contenedorQr.style.display = 'block';
-              document.getElementById('qr-datos').textContent = datos.codigoQR;
+              
+              // Generar QR visual
+              generarQRVisual(datos.codigoQR);
+              
             } else {
               contenedorQr.style.display = 'none';
+              
+              // Limpiar QR cuando no sea necesario
+              if (qrCodeInstance) {
+                document.getElementById('qr-visual').innerHTML = '';
+                qrCodeInstance = null;
+              }
             }
 
             document.getElementById('version').textContent = 'v' + (datos.version || '1.0.0');
@@ -719,6 +776,11 @@ app.get('/', (req, res) => {
             3. Toca <strong>"Vincular un dispositivo"</strong><br>
             4. Escanea el código QR que aparece abajo
           </div>
+          
+          <!-- Contenedor para el QR visual -->
+          <div id="qr-visual"></div>
+          
+          <!-- Código QR de texto como respaldo (oculto por defecto) -->
           <pre id="qr-datos" class="qr-datos"></pre>
         </div>
         
