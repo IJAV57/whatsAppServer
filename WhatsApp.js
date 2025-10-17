@@ -24,6 +24,7 @@ const RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX || 100; // requests por ventan
 // Inicializar Express
 const app = express();
 let servidor;
+app.set('trust proxy', 1);
 
 // Configuración de seguridad avanzada con Helmet
 app.use(helmet({
@@ -596,6 +597,16 @@ app.get('/', (req, res) => {
           border-radius: 8px;
           border: 2px dashed #94a3b8;
         }
+        
+        #qr-visual {
+          display: inline-block;
+          margin: 20px 0;
+          padding: 20px;
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
         .qr-datos {
           font-family: 'Courier New', monospace;
           font-size: 8px;
@@ -605,7 +616,9 @@ app.get('/', (req, res) => {
           border-radius: 8px;
           overflow: auto;
           line-height: 1;
+          display: none;
         }
+        
         .instrucciones {
           background: #f1f5f9;
           padding: 20px;
@@ -642,65 +655,18 @@ app.get('/', (req, res) => {
           font-size: 12px;
           color: #6b7280;
         }
+        .error-log {
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          color: #dc2626;
+          padding: 10px;
+          border-radius: 4px;
+          font-family: monospace;
+          font-size: 12px;
+          margin: 10px 0;
+          display: none;
+        }
       </style>
-      <script>
-        function obtenerClaseEstado(estado) {
-          if (estado === 'conectado') return 'conectado';
-          if (estado.includes('cargando') || estado === 'autenticado' || estado === 'inicializando') return 'cargando';
-          if (estado === 'esperando_qr') return 'esperando';
-          return 'desconectado';
-        }
-        
-        function obtenerMensajeEstado(estado) {
-          switch(estado) {
-            case 'conectado': return '✅ Conectado y listo para usar';
-            case 'esperando_qr': return '📱 Esperando escaneo del código QR';
-            case 'autenticado': return '🔑 Autenticado, cargando...';
-            case 'inicializando': return '🚀 Inicializando...';
-            case 'desconectado': return '❌ Desconectado';
-            case 'error_autenticacion': return '❌ Error de autenticación';
-            default:
-              if (estado.includes('cargando_')) {
-                const porcentaje = estado.split('_')[1];
-                return '⏳ Cargando... ' + porcentaje + '%';
-              }
-              return estado;
-          }
-        }
-
-        function verificarEstado() {
-          fetch('/api/estado')
-          .then(response => response.json())
-          .then(datos => {
-            const elementoEstado = document.getElementById('estado');
-            const claseEstado = obtenerClaseEstado(datos.estado);
-            const mensajeEstado = obtenerMensajeEstado(datos.estado);
-            
-            elementoEstado.textContent = mensajeEstado;
-            elementoEstado.className = 'estado ' + claseEstado;
-            
-            const contenedorQr = document.getElementById('qr-contenedor');
-            if (datos.codigoQR && datos.estado === 'esperando_qr') {
-              contenedorQr.style.display = 'block';
-              document.getElementById('qr-datos').textContent = datos.codigoQR;
-            } else {
-              contenedorQr.style.display = 'none';
-            }
-
-            document.getElementById('version').textContent = 'v' + (datos.version || '1.0.0');
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('estado').textContent = '❌ Error de conexión';
-            document.getElementById('estado').className = 'estado desconectado';
-          });
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-          verificarEstado();
-          setInterval(verificarEstado, 3000);
-        });
-      </script>
     </head>
     <body>
       <div class="version" id="version">v2.0.0</div>
@@ -719,7 +685,11 @@ app.get('/', (req, res) => {
             3. Toca <strong>"Vincular un dispositivo"</strong><br>
             4. Escanea el código QR que aparece abajo
           </div>
+          
+          <div id="qr-visual"></div>
+          <canvas id="qr-canvas" style="display: none;"></canvas>
           <pre id="qr-datos" class="qr-datos"></pre>
+          <div id="error-log" class="error-log"></div>
         </div>
         
         <div class="alerta">
@@ -756,6 +726,190 @@ app.get('/', (req, res) => {
           </ol>
         </div>
       </div>
+
+      <!-- Scripts con múltiples CDNs de respaldo -->
+      <script>
+        let qrCodeInstance = null;
+        let qrLibraryLoaded = false;
+        let currentQRText = null;
+        
+        // Función para mostrar errores
+        function mostrarError(mensaje) {
+          const errorLog = document.getElementById('error-log');
+          errorLog.textContent = mensaje;
+          errorLog.style.display = 'block';
+          console.error('QR Error:', mensaje);
+        }
+        
+        // Función para generar QR usando Canvas (método nativo)
+        function generarQRNativo(texto) {
+          try {
+            // Crear URL de API pública para QR
+            const qrApiUrl = \`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=\${encodeURIComponent(texto)}\`;
+            
+            const qrContainer = document.getElementById('qr-visual');
+            qrContainer.innerHTML = \`<img src="\${qrApiUrl}" alt="Código QR" style="max-width: 256px; height: auto; border: 2px solid #e5e7eb; border-radius: 8px;" onload="console.log('QR cargado correctamente')" onerror="mostrarQRTexto()"/>\`;
+            
+            document.getElementById('qr-datos').style.display = 'none';
+            return true;
+          } catch (error) {
+            mostrarError('Error generando QR nativo: ' + error.message);
+            return false;
+          }
+        }
+        
+        // Función para mostrar QR como texto si todo falla
+        function mostrarQRTexto() {
+          if (currentQRText) {
+            document.getElementById('qr-datos').textContent = currentQRText;
+            document.getElementById('qr-datos').style.display = 'block';
+            document.getElementById('qr-visual').innerHTML = '<p style="color: #dc2626;">⚠️ Usando código QR de texto como respaldo</p>';
+            mostrarError('Usando QR de texto como respaldo');
+          }
+        }
+        
+        // Función para generar QR con librería externa
+        function generarQRConLibreria(texto) {
+          if (!qrLibraryLoaded || typeof QRCode === 'undefined') {
+            return generarQRNativo(texto);
+          }
+          
+          try {
+            const contenedorQR = document.getElementById('qr-visual');
+            contenedorQR.innerHTML = '';
+            
+            qrCodeInstance = new QRCode(contenedorQR, {
+              text: texto,
+              width: 256,
+              height: 256,
+              colorDark: "#000000",
+              colorLight: "#ffffff",
+              correctLevel: QRCode.CorrectLevel.M
+            });
+            
+            document.getElementById('qr-datos').style.display = 'none';
+            return true;
+          } catch (error) {
+            mostrarError('Error con librería QRCode.js: ' + error.message);
+            return generarQRNativo(texto);
+          }
+        }
+        
+        function obtenerClaseEstado(estado) {
+          if (estado === 'conectado') return 'conectado';
+          if (estado.includes('cargando') || estado === 'autenticado' || estado === 'inicializando') return 'cargando';
+          if (estado === 'esperando_qr') return 'esperando';
+          return 'desconectado';
+        }
+        
+        function obtenerMensajeEstado(estado) {
+          switch(estado) {
+            case 'conectado': return '✅ Conectado y listo para usar';
+            case 'esperando_qr': return '📱 Esperando escaneo del código QR';
+            case 'autenticado': return '🔑 Autenticado, cargando...';
+            case 'inicializando': return '🚀 Inicializando...';
+            case 'desconectado': return '❌ Desconectado';
+            case 'error_autenticacion': return '❌ Error de autenticación';
+            default:
+              if (estado.includes('cargando_')) {
+                const porcentaje = estado.split('_')[1];
+                return '⏳ Cargando... ' + porcentaje + '%';
+              }
+              return estado;
+          }
+        }
+
+        function verificarEstado() {
+          fetch('/api/estado')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
+            }
+            return response.json();
+          })
+          .then(datos => {
+            const elementoEstado = document.getElementById('estado');
+            const claseEstado = obtenerClaseEstado(datos.estado);
+            const mensajeEstado = obtenerMensajeEstado(datos.estado);
+            
+            elementoEstado.textContent = mensajeEstado;
+            elementoEstado.className = 'estado ' + claseEstado;
+            
+            const contenedorQr = document.getElementById('qr-contenedor');
+            if (datos.codigoQR && datos.estado === 'esperando_qr') {
+              contenedorQr.style.display = 'block';
+              currentQRText = datos.codigoQR;
+              
+              // Intentar generar QR visual
+              const exito = generarQRConLibreria(datos.codigoQR);
+              if (!exito) {
+                setTimeout(() => mostrarQRTexto(), 1000);
+              }
+              
+            } else {
+              contenedorQr.style.display = 'none';
+              currentQRText = null;
+              
+              if (qrCodeInstance) {
+                document.getElementById('qr-visual').innerHTML = '';
+                qrCodeInstance = null;
+              }
+            }
+
+            document.getElementById('version').textContent = 'v' + (datos.version || '1.0.0');
+            
+            // Ocultar log de errores si todo funciona
+            document.getElementById('error-log').style.display = 'none';
+            
+          })
+          .catch(error => {
+            console.error('Error en verificarEstado:', error);
+            mostrarError('Error de conexión: ' + error.message);
+            document.getElementById('estado').textContent = '❌ Error de conexión: ' + error.message;
+            document.getElementById('estado').className = 'estado desconectado';
+          });
+        }
+        
+        // Cargar librerías QR con múltiples CDNs de respaldo
+        function cargarLibreriaQR() {
+          const cdns = [
+            'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+            'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js'
+          ];
+          
+          function intentarCargar(index) {
+            if (index >= cdns.length) {
+              console.warn('No se pudo cargar QRCode.js desde ningún CDN, usando método alternativo');
+              return;
+            }
+            
+            const script = document.createElement('script');
+            script.src = cdns[index];
+            script.onload = function() {
+              qrLibraryLoaded = true;
+              console.log('QRCode.js cargado desde:', cdns[index]);
+            };
+            script.onerror = function() {
+              console.warn('Fallo al cargar desde:', cdns[index]);
+              intentarCargar(index + 1);
+            };
+            document.head.appendChild(script);
+          }
+          
+          intentarCargar(0);
+        }
+
+        // Inicializar cuando se carga el DOM
+        document.addEventListener('DOMContentLoaded', () => {
+          cargarLibreriaQR();
+          verificarEstado();
+          setInterval(verificarEstado, 3000);
+        });
+        
+        // Exponer función para debug
+        window.mostrarQRTexto = mostrarQRTexto;
+      </script>
     </body>
     </html>
   `);
