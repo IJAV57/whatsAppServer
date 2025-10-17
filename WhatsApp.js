@@ -24,7 +24,7 @@ const RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX || 100; // requests por ventan
 // Inicializar Express
 const app = express();
 let servidor;
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 
 // Configuración de seguridad avanzada con Helmet
 app.use(helmet({
@@ -67,17 +67,24 @@ const limitadorGeneral = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: true
+  skip: (req) => {
+    // Skip rate limiting si no hay X-Forwarded-For
+    return false;
+  }
 });
 
 const limitadorMensajes = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minuto
-  max: 10, // máximo 10 mensajes por minuto
+  windowMs: 1 * 60 * 1000,
+  max: 10,
   message: {
     error: 'Límite de mensajes excedido, espera un minuto',
     retryAfter: 1
   },
-  trustProxy: true
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    return false;
+  }
 });
 
 app.use(limitadorGeneral);
@@ -554,7 +561,7 @@ app.get('/api/verificar-numero/:numero',
   }
 );
 
-// Página web de estado (página principal)
+// Página web de estado - Script corregido para mostrar QR
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -562,6 +569,7 @@ app.get('/', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:;">
       <title>WhatsApp API - Estado</title>
       <style>
         body { 
@@ -610,7 +618,7 @@ app.get('/', (req, res) => {
         }
         
         #qr-visual img {
-          max-width: 256px;
+          max-width: 300px;
           height: auto;
           border: 2px solid #e5e7eb;
           border-radius: 8px;
@@ -737,13 +745,13 @@ app.get('/', (req, res) => {
 
         function verificarEstado() {
           fetch('/api/estado')
-          .then(response => {
+          .then(function(response) {
             if (!response.ok) {
-              throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+              throw new Error('HTTP ' + response.status);
             }
             return response.json();
           })
-          .then(datos => {
+          .then(function(datos) {
             const elementoEstado = document.getElementById('estado');
             const claseEstado = obtenerClaseEstado(datos.estado);
             const mensajeEstado = obtenerMensajeEstado(datos.estado);
@@ -752,25 +760,29 @@ app.get('/', (req, res) => {
             elementoEstado.className = 'estado ' + claseEstado;
             
             const contenedorQr = document.getElementById('qr-contenedor');
+            const qrVisual = document.getElementById('qr-visual');
+            
             if (datos.codigoQR && datos.estado === 'esperando_qr') {
               contenedorQr.style.display = 'block';
               
-              const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=' + encodeURIComponent(datos.codigoQR);
+              const qrData = encodeURIComponent(datos.codigoQR);
+              const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + qrData;
               
-              document.getElementById('qr-visual').innerHTML = '<img src="' + qrApiUrl + '" alt="Código QR" />';
+              qrVisual.innerHTML = '<img src="' + qrUrl + '" alt="Codigo QR de WhatsApp" onerror="this.parentElement.innerHTML=\\'<p style=color:red>Error cargando QR</p>\\'" />';
               
             } else {
               contenedorQr.style.display = 'none';
-              document.getElementById('qr-visual').innerHTML = '';
+              qrVisual.innerHTML = '';
             }
 
-            document.getElementById('version').textContent = 'v' + (datos.version || '1.0.0');
+            document.getElementById('version').textContent = 'v' + (datos.version || '2.0.0');
             
           })
-          .catch(error => {
-            console.error('Error en verificarEstado:', error);
-            document.getElementById('estado').textContent = '❌ Error de conexión: ' + error.message;
-            document.getElementById('estado').className = 'estado desconectado';
+          .catch(function(error) {
+            console.error('Error:', error);
+            const elementoEstado = document.getElementById('estado');
+            elementoEstado.textContent = '❌ Error de conexión: ' + error.message;
+            elementoEstado.className = 'estado desconectado';
           });
         }
 
