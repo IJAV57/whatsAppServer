@@ -24,18 +24,13 @@ const RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX || 100; // requests por ventan
 // Inicializar Express
 const app = express();
 let servidor;
+
+// CRÍTICO: Configurar trust proxy PRIMERO antes de cualquier otro middleware
 app.set('trust proxy', 1);
 
 // Configuración de seguridad avanzada con Helmet
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com", "https://unpkg.com"],
-      imgSrc: ["'self'", "data:", "https:", "https://api.qrserver.com"],
-    },
-  },
+  contentSecurityPolicy: false, // Desactivar CSP para permitir cargar imágenes externas
   hsts: {
     maxAge: 31536000,
     includeSubDomains: true,
@@ -67,23 +62,14 @@ const limitadorGeneral = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting si no hay X-Forwarded-For
-    return false;
-  }
 });
 
 const limitadorMensajes = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 10,
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 10, // máximo 10 mensajes por minuto
   message: {
     error: 'Límite de mensajes excedido, espera un minuto',
     retryAfter: 1
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    return false;
   }
 });
 
@@ -561,7 +547,7 @@ app.get('/api/verificar-numero/:numero',
   }
 );
 
-// Página web de estado - Script corregido para mostrar QR
+// Página web de estado (página principal)
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -569,7 +555,6 @@ app.get('/', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:;">
       <title>WhatsApp API - Estado</title>
       <style>
         body { 
@@ -615,11 +600,13 @@ app.get('/', (req, res) => {
           background: white;
           border-radius: 8px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          min-height: 300px;
         }
         
         #qr-visual img {
           max-width: 300px;
-          height: auto;
+          width: 300px;
+          height: 300px;
           border: 2px solid #e5e7eb;
           border-radius: 8px;
         }
@@ -680,7 +667,7 @@ app.get('/', (req, res) => {
             4. Escanea el código QR que aparece abajo
           </div>
           
-          <div id="qr-visual"></div>
+          <div id="qr-visual">Cargando código QR...</div>
         </div>
         
         <div class="alerta">
@@ -736,7 +723,7 @@ app.get('/', (req, res) => {
             case 'error_autenticacion': return '❌ Error de autenticación';
             default:
               if (estado.includes('cargando_')) {
-                const porcentaje = estado.split('_')[1];
+                var porcentaje = estado.split('_')[1];
                 return '⏳ Cargando... ' + porcentaje + '%';
               }
               return estado;
@@ -752,27 +739,31 @@ app.get('/', (req, res) => {
             return response.json();
           })
           .then(function(datos) {
-            const elementoEstado = document.getElementById('estado');
-            const claseEstado = obtenerClaseEstado(datos.estado);
-            const mensajeEstado = obtenerMensajeEstado(datos.estado);
+            console.log('Estado recibido:', datos);
+            
+            var elementoEstado = document.getElementById('estado');
+            var claseEstado = obtenerClaseEstado(datos.estado);
+            var mensajeEstado = obtenerMensajeEstado(datos.estado);
             
             elementoEstado.textContent = mensajeEstado;
             elementoEstado.className = 'estado ' + claseEstado;
             
-            const contenedorQr = document.getElementById('qr-contenedor');
-            const qrVisual = document.getElementById('qr-visual');
+            var contenedorQr = document.getElementById('qr-contenedor');
+            var qrVisual = document.getElementById('qr-visual');
             
             if (datos.codigoQR && datos.estado === 'esperando_qr') {
+              console.log('Mostrando QR, longitud:', datos.codigoQR.length);
               contenedorQr.style.display = 'block';
               
-              const qrData = encodeURIComponent(datos.codigoQR);
-              const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + qrData;
+              var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(datos.codigoQR);
+              console.log('URL del QR:', qrUrl);
               
-              qrVisual.innerHTML = '<img src="' + qrUrl + '" alt="Codigo QR de WhatsApp" onerror="this.parentElement.innerHTML=\\'<p style=color:red>Error cargando QR</p>\\'" />';
+              qrVisual.innerHTML = '<img src="' + qrUrl + '" alt="Codigo QR" onload="console.log(\'QR imagen cargada\')" onerror="console.error(\'Error cargando QR\'); this.src=\\'data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'300\\' height=\\'300\\'%3E%3Crect fill=\\'%23f00\\' width=\\'300\\' height=\\'300\\'/%3E%3Ctext x=\\'50%25\\' y=\\'50%25\\' text-anchor=\\'middle\\' fill=\\'white\\'%3EError cargando QR%3C/text%3E%3C/svg%3E\\'" />';
               
             } else {
+              console.log('Ocultando QR, estado:', datos.estado);
               contenedorQr.style.display = 'none';
-              qrVisual.innerHTML = '';
+              qrVisual.innerHTML = 'Cargando código QR...';
             }
 
             document.getElementById('version').textContent = 'v' + (datos.version || '2.0.0');
@@ -780,7 +771,7 @@ app.get('/', (req, res) => {
           })
           .catch(function(error) {
             console.error('Error:', error);
-            const elementoEstado = document.getElementById('estado');
+            var elementoEstado = document.getElementById('estado');
             elementoEstado.textContent = '❌ Error de conexión: ' + error.message;
             elementoEstado.className = 'estado desconectado';
           });
