@@ -24,6 +24,7 @@ const RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX || 100; // requests por ventan
 // Inicializar Express
 const app = express();
 let servidor;
+app.set('trust proxy', 1);
 
 // Configuración de seguridad avanzada con Helmet
 app.use(helmet({
